@@ -1,3 +1,2 @@
 Flask>=3.0,<4.0
-speedport-api>=0.7
 speedport-api
