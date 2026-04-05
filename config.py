@@ -6,7 +6,7 @@ from typing import Dict, List
 # Edit these values for your network and target device.
 USER_CONFIG = {
     "TARGET_MACS": [],
-    "TARGET_IPS": ["192.168.1.76"],
+    "TARGET_IPS": ["192.168.2.76"],
     "TARGET_HOSTNAMES": [],
     "SUBNET_CIDR": "192.168.2.0/24",
     "POLL_INTERVAL_SECONDS": 20,
