@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Home Presence</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <main class="page">
+      <section class="card">
+        <p class="eyebrow">Local presence monitor</p>
+        <h1>Device Status</h1>
+        <p class="subtle">
+          The browser only reads backend results. The Raspberry Pi or local server does the actual network checks.
+        </p>
+
+        <div class="status-block">
+          <div id="status-badge" class="badge badge-neutral">Checking...</div>
+          <p id="status-text" class="status-text">Waiting for the first backend response.</p>
+        </div>
+
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="label">Last checked</span>
+            <strong id="last-checked">-</strong>
+          </div>
+          <div class="meta-item">
+            <span class="label">Method</span>
+            <strong id="method">-</strong>
+          </div>
+          <div class="meta-item">
+            <span class="label">Matched by</span>
+            <strong id="matched-by">-</strong>
+          </div>
+          <div class="meta-item">
+            <span class="label">Target matched</span>
+            <strong id="target-identifier">-</strong>
+          </div>
+          <div class="meta-item">
+            <span class="label">Confidence</span>
+            <strong id="confidence">-</strong>
+          </div>
+          <div class="meta-item">
+            <span class="label">Last positive</span>
+            <strong id="last-positive">-</strong>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="refresh-button" type="button">Refresh now</button>
+          <span id="refresh-note" class="subtle"></span>
+        </div>
+
+        <details class="debug-panel">
+          <summary>Debug details</summary>
+          <p class="subtle">
+            Configured targets: MAC {{ target_summary.macs | join(', ') if target_summary.macs else 'none' }}, IP {{ target_summary.ips | join(', ') if target_summary.ips else 'none' }}, hostname {{ target_summary.hostnames | join(', ') if target_summary.hostnames else 'none' }}
+          </p>
+          <div class="debug-actions">
+            <button id="load-debug-button" type="button">Load full device debug</button>
+          </div>
+          <pre id="debug-output">No debug data loaded yet.</pre>
+        </details>
+      </section>
+    </main>
+
+    <script>
+      window.APP_CONFIG = {{ frontend_config | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>
