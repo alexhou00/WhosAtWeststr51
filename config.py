@@ -13,7 +13,8 @@ USER_CONFIG = {
     "COMMAND_TIMEOUT_SECONDS": 8,
     "ENABLE_REVERSE_DNS": True,
     "ENABLE_ARP_FALLBACK": True,
-    "ENABLE_NMAP_FALLBACK": False,
+    "ENABLE_NMAP_FALLBACK": True,
+    "ENABLE_SPEEDPORT_FALLBACK": True,
     "BIND_HOST": "0.0.0.0",
     "BIND_PORT": 5151,
 }
@@ -49,6 +50,7 @@ class AppConfig:
     enable_reverse_dns: bool
     enable_arp_fallback: bool
     enable_nmap_fallback: bool
+    enable_speedport_fallback: bool
     bind_host: str
     bind_port: int
 
@@ -79,6 +81,7 @@ def load_config() -> AppConfig:
         enable_reverse_dns=bool(USER_CONFIG["ENABLE_REVERSE_DNS"]),
         enable_arp_fallback=bool(USER_CONFIG["ENABLE_ARP_FALLBACK"]),
         enable_nmap_fallback=bool(USER_CONFIG["ENABLE_NMAP_FALLBACK"]),
+        enable_speedport_fallback=bool(USER_CONFIG["ENABLE_SPEEDPORT_FALLBACK"]),
         bind_host=str(USER_CONFIG["BIND_HOST"]).strip() or "127.0.0.1",
         bind_port=int(USER_CONFIG["BIND_PORT"]),
     )

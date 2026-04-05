@@ -1,6 +1,6 @@
 # Home Presence Monitor
 
-Small Flask app for a Raspberry Pi or another Linux machine on your home network. The backend checks local network presence with Linux commands such as `ip neigh`, optionally `arp -a`, and optionally `nmap -sn`. The browser does not scan the network itself; it only fetches backend results over HTTP.
+Small Flask app for a Raspberry Pi or another Linux machine on your home network. The backend checks local network presence with Linux commands such as `ip neigh`, optionally `arp -a`, optionally `nmap -sn`, and optionally `speedport devices`. The browser does not scan the network itself; it only fetches backend results over HTTP.
 
 ## File tree
 
@@ -44,6 +44,7 @@ USER_CONFIG = {
     "ENABLE_REVERSE_DNS": True,
     "ENABLE_ARP_FALLBACK": True,
     "ENABLE_NMAP_FALLBACK": False,
+    "ENABLE_SPEEDPORT_FALLBACK": False,
     "BIND_HOST": "127.0.0.1",
     "BIND_PORT": 5000,
 }
@@ -55,6 +56,7 @@ Notes:
 - `TARGET_IPS`: Useful when the device gets a stable DHCP reservation.
 - `TARGET_HOSTNAMES`: Lowest-confidence option, but useful for debugging or when reverse DNS is available.
 - `ENABLE_NMAP_FALLBACK`: Off by default because it is an active scan of the configured local subnet.
+- `ENABLE_SPEEDPORT_FALLBACK`: Off by default. Enables a final fallback using the `speedport devices` command from `speedport-api`.
 - `BIND_HOST`: Defaults to `127.0.0.1` for local-only use. Change to `0.0.0.0` only if you want to access it from other devices on your LAN.
 
 ## Setup on Raspberry Pi / Linux
@@ -85,7 +87,13 @@ Notes:
    pip install -r requirements.txt
    ```
 
-5. Edit `config.py` with your real MAC, IP, hostname, and subnet.
+5. If you want to use the Speedport router list as a final fallback, make sure the `speedport` CLI works on the Pi:
+
+   ```bash
+   speedport devices
+   ```
+
+6. Edit `config.py` with your real MAC, IP, hostname, and subnet.
 
 ## Run the server
 
@@ -135,7 +143,8 @@ Returns the currently observed nearby devices and command errors, useful for fig
 4. Visit the web page and press `Refresh now`.
 5. If the device does not appear immediately, run a normal network action from that device first, such as opening a website or pinging the Pi, so it shows up in the Pi's neighbor table.
 6. If passive methods are not enough for your setup, enable `ENABLE_NMAP_FALLBACK` and test again.
-7. Use `GET /api/devices/debug` or the page's debug panel to inspect what identifiers are actually visible.
+7. If the router's own connected-device list is more reliable in your setup, enable `ENABLE_SPEEDPORT_FALLBACK` and test again.
+8. Use `GET /api/devices/debug` or the page's debug panel to inspect what identifiers are actually visible.
 
 Useful manual checks on the Raspberry Pi:
 
@@ -143,6 +152,7 @@ Useful manual checks on the Raspberry Pi:
 ip neigh
 arp -a
 nmap -sn 192.168.1.0/24
+speedport devices
 ```
 
 ## Limitations
@@ -153,3 +163,4 @@ nmap -sn 192.168.1.0/24
 - Some devices use MAC randomization, especially on Wi-Fi, which can break MAC-based matching.
 - Hostname matching is weaker than MAC or a known stable IP.
 - `nmap -sn` is more reliable than passive cache inspection, but it is still only checking the configured local subnet and may miss firewalled or unusual devices.
+- `speedport devices` depends on what the router reports as connected. That may be more useful than ARP in some home networks, but it is still not a perfect proof of physical presence.

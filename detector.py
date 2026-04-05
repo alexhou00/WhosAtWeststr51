@@ -67,6 +67,9 @@ class DeviceObservation:
         if self.source == "nmap -sn":
             return True
 
+        if self.source == "speedport devices":
+            return str(self.state).lower() == "true"
+
         return bool(self.ip or self.mac)
 
     def to_dict(self) -> Dict[str, Optional[str]]:
@@ -192,6 +195,9 @@ class PresenceDetector:
         if self.config.enable_nmap_fallback:
             results.append(self._collect_nmap_scan())
 
+        if self.config.enable_speedport_fallback:
+            results.append(self._collect_speedport_devices())
+
         return results
 
     def _collect_ip_neigh(self) -> Tuple[str, List[DeviceObservation], List[str]]:
@@ -252,6 +258,23 @@ class PresenceDetector:
 
         devices = self._parse_nmap_output(result.stdout)
         self._maybe_fill_hostnames(devices)
+        return method_name, devices, []
+
+    def _collect_speedport_devices(self) -> Tuple[str, List[DeviceObservation], List[str]]:
+        method_name = "speedport devices"
+        if not shutil.which("speedport"):
+            return method_name, [], [
+                "speedport fallback is enabled, but the speedport command is not installed."
+            ]
+
+        result = self._run_command(["speedport", "devices"])
+        if result.error:
+            return method_name, [], [result.error]
+        if result.returncode != 0:
+            message = result.stderr.strip() or result.stdout.strip() or "speedport devices returned a non-zero exit code."
+            return method_name, [], [message]
+
+        devices = self._parse_speedport_output(result.stdout)
         return method_name, devices, []
 
     def _run_command(self, args: List[str]) -> CommandResult:
@@ -370,6 +393,44 @@ class PresenceDetector:
 
         return devices
 
+    def _parse_speedport_output(self, output: str) -> List[DeviceObservation]:
+        devices: List[DeviceObservation] = []
+        lines = [line.rstrip() for line in output.splitlines() if line.strip()]
+        header_seen = False
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("+") and stripped.endswith("+"):
+                continue
+
+            if "|" not in stripped:
+                continue
+
+            columns = [part.strip() for part in stripped.strip("|").split("|")]
+            if len(columns) != 4:
+                continue
+
+            if columns[0].lower() == "ipv4":
+                header_seen = True
+                continue
+
+            if not header_seen:
+                continue
+
+            ip_value, name_value, type_value, connected_value = columns
+            devices.append(
+                DeviceObservation(
+                    source="speedport devices",
+                    ip=ip_value or None,
+                    hostname=_normalize_hostname(name_value) if name_value else None,
+                    interface=type_value or None,
+                    state=connected_value,
+                    raw=line,
+                )
+            )
+
+        return devices
+
     def _split_nmap_target(self, target: str) -> Tuple[Optional[str], Optional[str]]:
         if target.endswith(")") and " (" in target:
             hostname, ip = target.rsplit(" (", 1)
@@ -400,7 +461,10 @@ class PresenceDetector:
             )
 
         if device.ip and device.ip in self.config.target_ips:
-            confidence = "high" if device.source == "nmap -sn" else "medium"
+            if device.source in {"nmap -sn", "speedport devices"}:
+                confidence = "high"
+            else:
+                confidence = "medium"
             return MatchResult(
                 matched_by="ip_address",
                 target_identifier=device.ip,
@@ -410,7 +474,7 @@ class PresenceDetector:
 
         for candidate in _hostname_candidates(device.hostname):
             if candidate in self.config.target_hostnames:
-                confidence = "medium" if device.source == "nmap -sn" else "low"
+                confidence = "medium" if device.source in {"nmap -sn", "speedport devices"} else "low"
                 return MatchResult(
                     matched_by="hostname",
                     target_identifier=candidate,
