@@ -14,8 +14,8 @@ USER_CONFIG = {
     "ENABLE_REVERSE_DNS": True,
     "ENABLE_ARP_FALLBACK": True,
     "ENABLE_NMAP_FALLBACK": False,
-    "BIND_HOST": "127.0.0.1",
-    "BIND_PORT": 5000,
+    "BIND_HOST": "0.0.0.0",
+    "BIND_PORT": 5151,
 }
 
 
