@@ -135,8 +135,8 @@ function renderPerson(person) {
   card.classList.toggle("person-card-absent", !person.present);
 
   statusText.textContent = person.present
-    ? `${personName}'s device was detected on the network.`
-    : `${personName} is probably not at home right now.`;
+    ? `${personName}'s device was detected on the network. She is very likely at home. However, she may have just left or may have left home without the phone.`
+    : `${personName} is probably not at home right now, or the device is not connected to home Wi-Fi or is inactive.`;
 
   setField(card, "method", person.method || "-");
   setField(card, "matched_by", labelForMatchedBy(person.matched_by));
