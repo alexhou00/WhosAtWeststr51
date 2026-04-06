@@ -1,20 +1,36 @@
 const appConfig = window.APP_CONFIG || {};
 
 const personCards = Array.from(document.querySelectorAll("[data-person-card]"));
+const personCardMap = new Map(
+  personCards
+    .map((card) => [card.dataset.personCard || "", card])
+    .filter(([name]) => name)
+);
 const debugOutput = document.getElementById("debug-output");
 const refreshButton = document.getElementById("refresh-button");
 const loadDebugButton = document.getElementById("load-debug-button");
 const refreshNote = document.getElementById("refresh-note");
 const globalLastChecked = document.getElementById("global-last-checked");
 let lastSuccessfulCheckedText = "-";
+let latestStatusPayload = null;
+let latestDeviceDebugPayload = null;
+let latestFrontendIssue = null;
+let activeRefreshPromise = null;
 
 const pollSeconds = Number(appConfig.pollingIntervalSeconds || 600);
 const idleRefreshNote = `Auto-refresh every ${pollSeconds} seconds.`;
-refreshNote.textContent = idleRefreshNote;
+if (refreshNote) {
+  refreshNote.textContent = idleRefreshNote;
+}
 
 function setBadgeState(element, kind, text) {
+  if (!element) {
+    return;
+  }
+
   element.textContent = text;
-  element.className = "badge";
+  element.classList.remove("badge-success", "badge-danger", "badge-neutral");
+  element.classList.add("person-badge", "badge");
 
   if (kind === "present") {
     element.classList.add("badge-success");
@@ -76,14 +92,42 @@ function setField(card, fieldName, value) {
   }
 }
 
-function renderPerson(person) {
-  const card = document.querySelector(`[data-person-card="${person.name}"]`);
-  if (!card) {
+function errorMessageFrom(error) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return String(error || "Unknown error");
+}
+
+function renderDebugSnapshot() {
+  if (!debugOutput) {
     return;
+  }
+
+  const payload = {
+    last_successful_checked: lastSuccessfulCheckedText,
+    status_response: latestStatusPayload,
+    device_debug_response: latestDeviceDebugPayload,
+    frontend_issue: latestFrontendIssue,
+  };
+
+  debugOutput.textContent = JSON.stringify(payload, null, 2);
+}
+
+function renderPerson(person) {
+  const personName = String(person?.name || "").trim();
+  const card = personCardMap.get(personName);
+  if (!card) {
+    throw new Error(`No person card exists for "${personName || "unknown"}".`);
   }
 
   const badge = card.querySelector(".person-badge");
   const statusText = card.querySelector(".person-status");
+  if (!badge || !statusText) {
+    throw new Error(`Person card markup is incomplete for "${personName || "unknown"}".`);
+  }
+
   const badgeKind = person.present ? "present" : "absent";
 
   setBadgeState(badge, badgeKind, person.status_text || "Unknown");
@@ -91,8 +135,8 @@ function renderPerson(person) {
   card.classList.toggle("person-card-absent", !person.present);
 
   statusText.textContent = person.present
-    ? `${person.name}'s device was detected on the network.`
-    : `${person.name} is probably not at home right now.`;
+    ? `${personName}'s device was detected on the network.`
+    : `${personName} is probably not at home right now.`;
 
   setField(card, "method", person.method || "-");
   setField(card, "matched_by", labelForMatchedBy(person.matched_by));
@@ -101,33 +145,58 @@ function renderPerson(person) {
 }
 
 function renderStatus(data) {
+  latestStatusPayload = data;
+  latestFrontendIssue = null;
   lastSuccessfulCheckedText = formatTimestamp(data.last_checked);
-  globalLastChecked.textContent = lastSuccessfulCheckedText;
+  if (globalLastChecked) {
+    globalLastChecked.textContent = lastSuccessfulCheckedText;
+  }
+
+  renderDebugSnapshot();
+
   const people = Array.isArray(data.people) ? data.people : [];
   for (const person of people) {
-    renderPerson(person);
+    try {
+      renderPerson(person);
+    } catch (error) {
+      latestFrontendIssue = {
+        error: "person_render_failed",
+        message: errorMessageFrom(error),
+        person,
+        occurred_at: new Date().toISOString(),
+      };
+      renderDebugSnapshot();
+    }
   }
 }
 
 function renderDebugData(data) {
-  debugOutput.textContent = JSON.stringify(data, null, 2);
+  latestDeviceDebugPayload = data;
+  renderDebugSnapshot();
 }
 
-function renderFetchError(message) {
-  globalLastChecked.textContent = lastSuccessfulCheckedText;
+function renderFetchError(message, extra = {}) {
+  if (globalLastChecked) {
+    globalLastChecked.textContent = lastSuccessfulCheckedText;
+  }
+
   for (const card of personCards) {
     const badge = card.querySelector(".person-badge");
     const statusText = card.querySelector(".person-status");
     setBadgeState(badge, "neutral", "Check failed");
-    statusText.textContent = message;
+    if (statusText) {
+      statusText.textContent = message;
+    }
   }
 
-  renderDebugData({
+  latestFrontendIssue = {
     error: "status_refresh_failed",
     message,
+    ...extra,
     last_successful_checked: lastSuccessfulCheckedText,
     occurred_at: new Date().toISOString(),
-  });
+  };
+  renderDebugSnapshot();
 }
 
 async function fetchJson(url) {
@@ -152,44 +221,61 @@ async function fetchJson(url) {
 }
 
 async function refreshStatus() {
-  refreshButton.disabled = true;
-  refreshButton.textContent = "Refreshing...";
-  refreshNote.textContent = "Refreshing from backend...";
+  if (activeRefreshPromise) {
+    return activeRefreshPromise;
+  }
 
-  try {
-    const results = await Promise.allSettled([
-      fetchJson(appConfig.statusEndpoint || "/api/status"),
-      fetchJson(appConfig.debugEndpoint || "/api/devices/debug"),
-    ]);
-
-    const statusResult = results[0];
-    const debugResult = results[1];
-
-    if (statusResult.status === "fulfilled") {
-      renderStatus(statusResult.value);
-    } else {
-      renderFetchError(statusResult.reason.message);
+  activeRefreshPromise = (async () => {
+    if (refreshButton) {
+      refreshButton.disabled = true;
+      refreshButton.textContent = "Refreshing...";
+    }
+    if (refreshNote) {
+      refreshNote.textContent = "Refreshing from backend...";
     }
 
-    if (debugResult.status === "fulfilled") {
-      renderDebugData(debugResult.value);
-    } else {
+    const statusPromise = fetchJson(appConfig.statusEndpoint || "/api/status");
+    const debugPromise = fetchJson(appConfig.debugEndpoint || "/api/devices/debug");
+
+    try {
+      const statusData = await statusPromise;
+      renderStatus(statusData);
+    } catch (error) {
+      renderFetchError(errorMessageFrom(error));
+    }
+
+    try {
+      const debugData = await debugPromise;
+      renderDebugData(debugData);
+    } catch (error) {
       renderDebugData({
         error: "debug_refresh_failed",
-        message: debugResult.reason.message,
+        message: errorMessageFrom(error),
         last_successful_checked: lastSuccessfulCheckedText,
         occurred_at: new Date().toISOString(),
       });
+    } finally {
+      if (refreshButton) {
+        refreshButton.disabled = false;
+        refreshButton.textContent = "Refresh now";
+      }
+      if (refreshNote) {
+        refreshNote.textContent = idleRefreshNote;
+      }
     }
+  })();
+
+  try {
+    await activeRefreshPromise;
   } finally {
-    refreshButton.disabled = false;
-    refreshButton.textContent = "Refresh now";
-    refreshNote.textContent = idleRefreshNote;
+    activeRefreshPromise = null;
   }
 }
 
 async function loadFullDebug() {
-  loadDebugButton.disabled = true;
+  if (loadDebugButton) {
+    loadDebugButton.disabled = true;
+  }
 
   try {
     const data = await fetchJson(appConfig.debugEndpoint || "/api/devices/debug");
@@ -197,17 +283,23 @@ async function loadFullDebug() {
   } catch (error) {
     renderDebugData({
       error: "debug_refresh_failed",
-      message: error.message,
+      message: errorMessageFrom(error),
       last_successful_checked: lastSuccessfulCheckedText,
       occurred_at: new Date().toISOString(),
     });
   } finally {
-    loadDebugButton.disabled = false;
+    if (loadDebugButton) {
+      loadDebugButton.disabled = false;
+    }
   }
 }
 
-refreshButton.addEventListener("click", refreshStatus);
-loadDebugButton.addEventListener("click", loadFullDebug);
+if (refreshButton) {
+  refreshButton.addEventListener("click", refreshStatus);
+}
+if (loadDebugButton) {
+  loadDebugButton.addEventListener("click", loadFullDebug);
+}
 
 refreshStatus();
 window.setInterval(refreshStatus, pollSeconds * 1000);
