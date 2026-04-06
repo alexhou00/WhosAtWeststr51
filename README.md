@@ -45,6 +45,7 @@ USER_CONFIG = {
     "ENABLE_ARP_FALLBACK": True,
     "ENABLE_NMAP_FALLBACK": False,
     "ENABLE_SPEEDPORT_FALLBACK": False,
+    "SPEEDPORT_COMMAND": "",
     "BIND_HOST": "127.0.0.1",
     "BIND_PORT": 5000,
 }
@@ -57,6 +58,7 @@ Notes:
 - `TARGET_HOSTNAMES`: Lowest-confidence option, but useful for debugging or when reverse DNS is available.
 - `ENABLE_NMAP_FALLBACK`: Off by default because it is the slowest and most active fallback, scanning the configured local subnet.
 - `ENABLE_SPEEDPORT_FALLBACK`: Enables the primary `speedport devices` check from `speedport-api` before the local fallbacks.
+- `SPEEDPORT_COMMAND`: Optional explicit path to the `speedport` executable. Leave it empty to prefer a repo-local `.venv` executable if present, then fall back to `speedport`.
 - `BIND_HOST`: Defaults to `127.0.0.1` for local-only use. Change to `0.0.0.0` only if you want to access it from other devices on your LAN.
 
 ## Setup on Raspberry Pi / Linux

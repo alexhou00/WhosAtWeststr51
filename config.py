@@ -1,4 +1,5 @@
 import ipaddress
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, List
 
@@ -15,6 +16,7 @@ USER_CONFIG = {
     "ENABLE_ARP_FALLBACK": True,
     "ENABLE_NMAP_FALLBACK": True,
     "ENABLE_SPEEDPORT_FALLBACK": True,
+    "SPEEDPORT_COMMAND": "",
     "BIND_HOST": "0.0.0.0",
     "BIND_PORT": 5151,
 }
@@ -39,6 +41,27 @@ def _normalize_host(hostname: str) -> str:
     return hostname.strip().lower().rstrip(".")
 
 
+def _resolve_speedport_command(configured_value: str) -> str:
+    configured = str(configured_value).strip()
+    if configured:
+        return configured
+
+    project_root = Path(__file__).resolve().parent
+    candidates = [
+        project_root / ".venv" / "Scripts" / "speedport.exe",
+        project_root / ".venv" / "Scripts" / "speedport.cmd",
+        project_root / ".venv" / "Scripts" / "speedport.bat",
+        project_root / ".venv" / "Scripts" / "speedport",
+        project_root / ".venv" / "bin" / "speedport",
+    ]
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+
+    return "speedport"
+
+
 @dataclass
 class AppConfig:
     target_macs: List[str]
@@ -51,6 +74,7 @@ class AppConfig:
     enable_arp_fallback: bool
     enable_nmap_fallback: bool
     enable_speedport_fallback: bool
+    speedport_command: str
     bind_host: str
     bind_port: int
 
@@ -82,6 +106,7 @@ def load_config() -> AppConfig:
         enable_arp_fallback=bool(USER_CONFIG["ENABLE_ARP_FALLBACK"]),
         enable_nmap_fallback=bool(USER_CONFIG["ENABLE_NMAP_FALLBACK"]),
         enable_speedport_fallback=bool(USER_CONFIG["ENABLE_SPEEDPORT_FALLBACK"]),
+        speedport_command=_resolve_speedport_command(USER_CONFIG.get("SPEEDPORT_COMMAND", "")),
         bind_host=str(USER_CONFIG["BIND_HOST"]).strip() or "127.0.0.1",
         bind_port=int(USER_CONFIG["BIND_PORT"]),
     )

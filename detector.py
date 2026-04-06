@@ -2,6 +2,7 @@ import re
 import shutil
 import socket
 import subprocess
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -187,18 +188,16 @@ class PresenceDetector:
         }
 
     def _collect_all_sources(self) -> List[Tuple[str, List[DeviceObservation], List[str]]]:
-        results: List[Tuple[str, List[DeviceObservation], List[str]]] = []
-
-        if self.config.enable_speedport_fallback:
-            results.append(self._collect_speedport_devices())
-
-        results.append(self._collect_ip_neigh())
+        results = [self._collect_ip_neigh()]
 
         if self.config.enable_arp_fallback:
             results.append(self._collect_arp_table())
 
         if self.config.enable_nmap_fallback:
             results.append(self._collect_nmap_scan())
+
+        if self.config.enable_speedport_fallback:
+            results.append(self._collect_speedport_devices())
 
         return results
 
@@ -264,12 +263,15 @@ class PresenceDetector:
 
     def _collect_speedport_devices(self) -> Tuple[str, List[DeviceObservation], List[str]]:
         method_name = "speedport devices"
-        if not shutil.which("speedport"):
+        speedport_command = self.config.speedport_command
+        if not self._command_exists(speedport_command):
             return method_name, [], [
-                "speedport fallback is enabled, but the speedport command is not installed."
+                "speedport fallback is enabled, but the configured Speedport command was not found: {0}".format(
+                    speedport_command
+                )
             ]
 
-        result = self._run_command(["speedport", "devices"])
+        result = self._run_command([speedport_command, "devices"])
         if result.error:
             return method_name, [], [result.error]
         if result.returncode != 0:
@@ -314,6 +316,11 @@ class PresenceDetector:
                 returncode=1,
                 error="Failed to run {0}: {1}".format(" ".join(args), exc),
             )
+
+    def _command_exists(self, command: str) -> bool:
+        if Path(command).is_file():
+            return True
+        return shutil.which(command) is not None
 
     def _parse_ip_neigh_line(self, line: str) -> Optional[DeviceObservation]:
         tokens = line.split()
