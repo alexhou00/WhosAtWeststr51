@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
-from config import AppConfig
+from config import AppConfig, TargetConfig
 
 
 ARP_LINE_RE = re.compile(
@@ -88,6 +88,7 @@ class DeviceObservation:
 
 @dataclass
 class MatchResult:
+    person_name: str
     matched_by: str
     target_identifier: str
     confidence: str
@@ -105,26 +106,22 @@ class CommandResult:
 class PresenceDetector:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
-        self.last_positive_detection: Optional[str] = None
+        self.last_positive_detection: Dict[str, Optional[str]] = {
+            target.name: None for target in config.targets
+        }
 
     def get_status(self) -> Dict[str, object]:
         checked_at = _now_iso()
 
         if not self.config.has_targets:
             return {
-                "present": False,
-                "status_text": "Configuration needed",
                 "last_checked": checked_at,
-                "method": "not_configured",
-                "matched_by": None,
-                "target_identifier": None,
-                "confidence": "low",
-                "last_positive_detection": self.last_positive_detection,
                 "sources_attempted": [],
-                "details": [],
                 "errors": [
                     "No target MAC, IP, or hostname is configured in config.py."
                 ],
+                "people": [],
+                "details": [],
             }
 
         all_devices: List[DeviceObservation] = []
@@ -136,36 +133,21 @@ class PresenceDetector:
             errors.extend(method_errors)
             all_devices.extend(devices)
 
-            match = self._find_match(devices)
+        people = []
+        for target in self.config.targets:
+            match = self._find_match_for_target(target, all_devices)
             if match:
-                self.last_positive_detection = checked_at
-                return {
-                    "present": True,
-                    "status_text": "Probably at Home",
-                    "last_checked": checked_at,
-                    "method": match.observation.source,
-                    "matched_by": match.matched_by,
-                    "target_identifier": match.target_identifier,
-                    "confidence": match.confidence,
-                    "last_positive_detection": self.last_positive_detection,
-                    "sources_attempted": sources_attempted,
-                    "details": [item.to_dict() for item in all_devices],
-                    "errors": errors,
-                }
+                self.last_positive_detection[target.name] = checked_at
+                people.append(self._build_person_status(target, checked_at, match, sources_attempted))
+            else:
+                people.append(self._build_person_status(target, checked_at, None, sources_attempted))
 
-        method_summary = ", ".join(sources_attempted) if sources_attempted else "no methods ran"
         return {
-            "present": False,
-            "status_text": "Probably not at Home",
             "last_checked": checked_at,
-            "method": method_summary,
-            "matched_by": None,
-            "target_identifier": None,
-            "confidence": "low",
-            "last_positive_detection": self.last_positive_detection,
             "sources_attempted": sources_attempted,
-            "details": [item.to_dict() for item in all_devices],
             "errors": errors,
+            "people": people,
+            "details": [item.to_dict() for item in all_devices],
         }
 
     def inspect_devices(self) -> Dict[str, object]:
@@ -190,9 +172,6 @@ class PresenceDetector:
     def _collect_all_sources(self) -> List[Tuple[str, List[DeviceObservation], List[str]]]:
         results: List[Tuple[str, List[DeviceObservation], List[str]]] = []
 
-        if self.config.enable_speedport_fallback:
-            results.append(self._collect_speedport_devices())
-
         results.append(self._collect_ip_neigh())
 
         if self.config.enable_arp_fallback:
@@ -200,6 +179,9 @@ class PresenceDetector:
 
         if self.config.enable_nmap_fallback:
             results.append(self._collect_nmap_scan())
+
+        if self.config.enable_speedport_fallback:
+            results.append(self._collect_speedport_devices())
 
         return results
 
@@ -452,31 +434,33 @@ class PresenceDetector:
 
         return target, None
 
-    def _find_match(self, devices: List[DeviceObservation]) -> Optional[MatchResult]:
+    def _find_match_for_target(self, target: TargetConfig, devices: List[DeviceObservation]) -> Optional[MatchResult]:
         for device in devices:
-            match = self._match_device(device)
+            match = self._match_device(target, device)
             if match:
                 return match
         return None
 
-    def _match_device(self, device: DeviceObservation) -> Optional[MatchResult]:
+    def _match_device(self, target: TargetConfig, device: DeviceObservation) -> Optional[MatchResult]:
         if not device.is_probably_present():
             return None
 
-        if device.mac and device.mac in self.config.target_macs:
+        if device.mac and device.mac in target.macs:
             return MatchResult(
+                person_name=target.name,
                 matched_by="mac_address",
                 target_identifier=device.mac,
                 confidence="high",
                 observation=device,
             )
 
-        if device.ip and device.ip in self.config.target_ips:
+        if device.ip and device.ip in target.ips:
             if device.source in {"nmap -sn", "speedport devices"}:
                 confidence = "high"
             else:
                 confidence = "medium"
             return MatchResult(
+                person_name=target.name,
                 matched_by="ip_address",
                 target_identifier=device.ip,
                 confidence=confidence,
@@ -484,9 +468,10 @@ class PresenceDetector:
             )
 
         for candidate in _hostname_candidates(device.hostname):
-            if candidate in self.config.target_hostnames:
+            if candidate in target.hostnames:
                 confidence = "medium" if device.source in {"nmap -sn", "speedport devices"} else "low"
                 return MatchResult(
+                    person_name=target.name,
                     matched_by="hostname",
                     target_identifier=candidate,
                     confidence=confidence,
@@ -494,6 +479,39 @@ class PresenceDetector:
                 )
 
         return None
+
+    def _build_person_status(
+        self,
+        target: TargetConfig,
+        checked_at: str,
+        match: Optional[MatchResult],
+        sources_attempted: List[str],
+    ) -> Dict[str, object]:
+        if match:
+            return {
+                "name": target.name,
+                "present": True,
+                "status_text": "Probably at Home",
+                "last_checked": checked_at,
+                "method": match.observation.source,
+                "matched_by": match.matched_by,
+                "target_identifier": match.target_identifier,
+                "confidence": match.confidence,
+                "last_positive_detection": self.last_positive_detection.get(target.name),
+            }
+
+        method_summary = ", ".join(sources_attempted) if sources_attempted else "no methods ran"
+        return {
+            "name": target.name,
+            "present": False,
+            "status_text": "Probably not at Home",
+            "last_checked": checked_at,
+            "method": method_summary,
+            "matched_by": None,
+            "target_identifier": None,
+            "confidence": "low",
+            "last_positive_detection": self.last_positive_detection.get(target.name),
+        }
 
     def _maybe_fill_hostnames(self, devices: List[DeviceObservation]) -> None:
         if not self.config.enable_reverse_dns:

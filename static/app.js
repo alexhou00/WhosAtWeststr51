@@ -1,13 +1,6 @@
 const appConfig = window.APP_CONFIG || {};
 
-const statusBadge = document.getElementById("status-badge");
-const statusText = document.getElementById("status-text");
-const lastChecked = document.getElementById("last-checked");
-const method = document.getElementById("method");
-const matchedBy = document.getElementById("matched-by");
-const targetIdentifier = document.getElementById("target-identifier");
-const confidence = document.getElementById("confidence");
-const lastPositive = document.getElementById("last-positive");
+const personCards = Array.from(document.querySelectorAll("[data-person-card]"));
 const debugOutput = document.getElementById("debug-output");
 const refreshButton = document.getElementById("refresh-button");
 const loadDebugButton = document.getElementById("load-debug-button");
@@ -16,21 +9,21 @@ const refreshNote = document.getElementById("refresh-note");
 const pollSeconds = Number(appConfig.pollingIntervalSeconds || 20);
 refreshNote.textContent = `Auto-refresh every ${pollSeconds} seconds.`;
 
-function setBadgeState(kind, text) {
-  statusBadge.textContent = text;
-  statusBadge.className = "badge";
+function setBadgeState(element, kind, text) {
+  element.textContent = text;
+  element.className = "badge";
 
   if (kind === "present") {
-    statusBadge.classList.add("badge-success");
+    element.classList.add("badge-success");
     return;
   }
 
   if (kind === "absent") {
-    statusBadge.classList.add("badge-danger");
+    element.classList.add("badge-danger");
     return;
   }
 
-  statusBadge.classList.add("badge-neutral");
+  element.classList.add("badge-neutral");
 }
 
 function formatTimestamp(value) {
@@ -66,41 +59,51 @@ function labelForMatchedBy(value) {
   return value;
 }
 
-function renderStatus(data) {
-  const badgeKind = data.present
-    ? "present"
-    : data.status_text === "Probably not at Home"
-      ? "absent"
-      : "neutral";
-  setBadgeState(badgeKind, data.status_text || "Unknown");
+function setField(card, fieldName, value) {
+  const field = card.querySelector(`[data-field="${fieldName}"]`);
+  if (field) {
+    field.textContent = value || "-";
+  }
+}
 
-  if (data.present) {
-    statusText.textContent = "The target device matched one of the configured identifiers.";
-  } else if (data.status_text && data.status_text !== "Probably not at Home") {
-    statusText.textContent = data.status_text;
-  } else {
-    statusText.textContent = "No configured target identifier matched during the latest check.";
+function renderPerson(person) {
+  const card = document.querySelector(`[data-person-card="${person.name}"]`);
+  if (!card) {
+    return;
   }
 
-  lastChecked.textContent = formatTimestamp(data.last_checked);
-  method.textContent = data.method || "-";
-  matchedBy.textContent = labelForMatchedBy(data.matched_by);
-  targetIdentifier.textContent = data.target_identifier || "-";
-  confidence.textContent = data.confidence || "-";
-  lastPositive.textContent = formatTimestamp(data.last_positive_detection);
+  const badge = card.querySelector(".person-badge");
+  const statusText = card.querySelector(".person-status");
+  const badgeKind = person.present ? "present" : "absent";
+
+  setBadgeState(badge, badgeKind, person.status_text || "Unknown");
+  card.classList.toggle("person-card-present", Boolean(person.present));
+  card.classList.toggle("person-card-absent", !person.present);
+
+  statusText.textContent = person.present
+    ? `${person.name} matched one of the configured device identifiers.`
+    : `${person.name} did not match any configured device during the latest check.`;
+
+  setField(card, "last_checked", formatTimestamp(person.last_checked));
+  setField(card, "method", person.method || "-");
+  setField(card, "matched_by", labelForMatchedBy(person.matched_by));
+  setField(card, "target_identifier", person.target_identifier || "-");
+  setField(card, "confidence", person.confidence || "-");
+  setField(card, "last_positive_detection", formatTimestamp(person.last_positive_detection));
+}
+
+function renderStatus(data) {
+  const people = Array.isArray(data.people) ? data.people : [];
+  for (const person of people) {
+    renderPerson(person);
+  }
 
   debugOutput.textContent = JSON.stringify(
     {
-      present: data.present,
-      status_text: data.status_text,
       last_checked: data.last_checked,
-      method: data.method,
-      matched_by: data.matched_by,
-      target_identifier: data.target_identifier,
-      confidence: data.confidence,
-      last_positive_detection: data.last_positive_detection,
       sources_attempted: data.sources_attempted,
       errors: data.errors,
+      people: data.people,
       details: data.details,
     },
     null,
@@ -109,8 +112,12 @@ function renderStatus(data) {
 }
 
 function renderFetchError(message) {
-  setBadgeState("neutral", "Check failed");
-  statusText.textContent = message;
+  for (const card of personCards) {
+    const badge = card.querySelector(".person-badge");
+    const statusText = card.querySelector(".person-status");
+    setBadgeState(badge, "neutral", "Check failed");
+    statusText.textContent = message;
+  }
 }
 
 async function fetchJson(url) {

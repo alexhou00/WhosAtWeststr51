@@ -12,50 +12,63 @@
         <p class="eyebrow">Local presence monitor</p>
         <h1>Who's At Home?</h1>
         <p class="subtle">
-          The Raspberry Pi checks the network for target devices to guess if someone is at home or not.
+          The Raspberry Pi checks the network for each target device and estimates whether that person is probably at home.
         </p>
-
-        <div class="status-block">
-          <div id="status-badge" class="badge badge-neutral">Checking...</div>
-          <p id="status-text" class="status-text">Waiting for the first backend response.</p>
-        </div>
-
-        <div class="meta-grid">
-          <div class="meta-item">
-            <span class="label">Last checked</span>
-            <strong id="last-checked">-</strong>
-          </div>
-          <div class="meta-item">
-            <span class="label">Method</span>
-            <strong id="method">-</strong>
-          </div>
-          <div class="meta-item">
-            <span class="label">Matched by</span>
-            <strong id="matched-by">-</strong>
-          </div>
-          <div class="meta-item">
-            <span class="label">Target matched</span>
-            <strong id="target-identifier">-</strong>
-          </div>
-          <div class="meta-item">
-            <span class="label">Confidence</span>
-            <strong id="confidence">-</strong>
-          </div>
-          <div class="meta-item">
-            <span class="label">Last positive</span>
-            <strong id="last-positive">-</strong>
-          </div>
-        </div>
 
         <div class="actions">
           <button id="refresh-button" type="button">Refresh now</button>
           <span id="refresh-note" class="subtle"></span>
         </div>
 
+        <div id="person-grid" class="person-grid">
+          {% for target in target_summary %}
+          <article class="person-card" data-person-card="{{ target.name }}">
+            <div class="person-card-main">
+              <p class="person-name">{{ target.name }}</p>
+              <div class="person-badge badge badge-neutral">Checking...</div>
+              <p class="person-status subtle">Waiting for backend response.</p>
+            </div>
+            <div class="person-hover-panel">
+              <div class="hover-grid">
+                <div class="meta-item">
+                  <span class="label">Last checked</span>
+                  <strong data-field="last_checked">-</strong>
+                </div>
+                <div class="meta-item">
+                  <span class="label">Method</span>
+                  <strong data-field="method">-</strong>
+                </div>
+                <div class="meta-item">
+                  <span class="label">Matched by</span>
+                  <strong data-field="matched_by">-</strong>
+                </div>
+                <div class="meta-item">
+                  <span class="label">Target matched</span>
+                  <strong data-field="target_identifier">-</strong>
+                </div>
+                <div class="meta-item">
+                  <span class="label">Confidence</span>
+                  <strong data-field="confidence">-</strong>
+                </div>
+                <div class="meta-item">
+                  <span class="label">Last positive</span>
+                  <strong data-field="last_positive_detection">-</strong>
+                </div>
+              </div>
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+
         <details class="debug-panel">
           <summary>Debug details</summary>
           <p class="subtle">
-            Configured targets: MAC {{ target_summary.macs | join(', ') if target_summary.macs else 'none' }}, IP {{ target_summary.ips | join(', ') if target_summary.ips else 'none' }}, hostname {{ target_summary.hostnames | join(', ') if target_summary.hostnames else 'none' }}
+            {% for target in target_summary %}
+            {{ target.name }}:
+            IP {{ target.ips | join(', ') if target.ips else 'none' }},
+            MAC {{ target.macs | join(', ') if target.macs else 'none' }},
+            hostname {{ target.hostnames | join(', ') if target.hostnames else 'none' }}{% if not loop.last %} | {% endif %}
+            {% endfor %}
           </p>
           <div class="debug-actions">
             <button id="load-debug-button" type="button">Load full device debug</button>

@@ -1,14 +1,30 @@
 import ipaddress
-from pathlib import Path
 from dataclasses import dataclass
-from typing import Dict, List
+from pathlib import Path
+from typing import Dict, List, Optional
 
 
-# Edit these values for your network and target device.
 USER_CONFIG = {
-    "TARGET_MACS": [],
-    "TARGET_IPS": ["192.168.2.61"],
-    "TARGET_HOSTNAMES": [],
+    "TARGETS": [
+        {
+            "name": "Chanel",
+            "macs": ["1E-46-E2-4C-2D-6F"],
+            "ips": ["192.168.2.61"],
+            "hostnames": [],
+        },
+        {
+            "name": "Jennie",
+            "macs": ["1A-3D-4C-EE-2C-B1"],
+            "ips": ["192.168.2.38"],
+            "hostnames": [],
+        },
+        {
+            "name": "Alex",
+            "macs": ["EE-DC-3B-F9-D1-C6"],
+            "ips": ["192.168.2.71"],
+            "hostnames": [],
+        },
+    ],
     "SUBNET_CIDR": "192.168.2.0/24",
     "POLL_INTERVAL_SECONDS": 20,
     "COMMAND_TIMEOUT_SECONDS": 8,
@@ -63,10 +79,28 @@ def _resolve_speedport_command(configured_value: str) -> str:
 
 
 @dataclass
+class TargetConfig:
+    name: str
+    macs: List[str]
+    ips: List[str]
+    hostnames: List[str]
+
+    @property
+    def has_identifiers(self) -> bool:
+        return bool(self.macs or self.ips or self.hostnames)
+
+    def to_summary(self) -> Dict[str, object]:
+        return {
+            "name": self.name,
+            "macs": self.macs,
+            "ips": self.ips,
+            "hostnames": self.hostnames,
+        }
+
+
+@dataclass
 class AppConfig:
-    target_macs: List[str]
-    target_ips: List[str]
-    target_hostnames: List[str]
+    targets: List[TargetConfig]
     subnet_cidr: str
     polling_interval_seconds: int
     command_timeout_seconds: int
@@ -80,25 +114,40 @@ class AppConfig:
 
     @property
     def has_targets(self) -> bool:
-        return bool(self.target_macs or self.target_ips or self.target_hostnames)
+        return any(target.has_identifiers for target in self.targets)
 
     @property
-    def target_summary(self) -> Dict[str, List[str]]:
-        return {
-            "macs": self.target_macs,
-            "ips": self.target_ips,
-            "hostnames": self.target_hostnames,
-        }
+    def target_summary(self) -> List[Dict[str, object]]:
+        return [target.to_summary() for target in self.targets]
+
+
+def _parse_target(raw_target: Dict[str, object]) -> Optional[TargetConfig]:
+    name = str(raw_target.get("name", "")).strip()
+    if not name:
+        return None
+
+    return TargetConfig(
+        name=name,
+        macs=[_normalize_mac(item) for item in _clean_string_list(raw_target.get("macs", []))],
+        ips=_clean_string_list(raw_target.get("ips", [])),
+        hostnames=[_normalize_host(item) for item in _clean_string_list(raw_target.get("hostnames", []))],
+    )
 
 
 def load_config() -> AppConfig:
     subnet_cidr = str(USER_CONFIG["SUBNET_CIDR"]).strip()
     ipaddress.ip_network(subnet_cidr, strict=False)
 
+    targets = []
+    for raw_target in USER_CONFIG.get("TARGETS", []):
+        if not isinstance(raw_target, dict):
+            continue
+        parsed = _parse_target(raw_target)
+        if parsed:
+            targets.append(parsed)
+
     return AppConfig(
-        target_macs=[_normalize_mac(item) for item in _clean_string_list(USER_CONFIG["TARGET_MACS"])],
-        target_ips=_clean_string_list(USER_CONFIG["TARGET_IPS"]),
-        target_hostnames=[_normalize_host(item) for item in _clean_string_list(USER_CONFIG["TARGET_HOSTNAMES"])],
+        targets=targets,
         subnet_cidr=subnet_cidr,
         polling_interval_seconds=max(5, int(USER_CONFIG["POLL_INTERVAL_SECONDS"])),
         command_timeout_seconds=max(2, int(USER_CONFIG["COMMAND_TIMEOUT_SECONDS"])),
