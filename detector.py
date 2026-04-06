@@ -15,7 +15,6 @@ ARP_LINE_RE = re.compile(
 )
 NMAP_REPORT_RE = re.compile(r"^Nmap scan report for (?P<target>.+)$")
 NMAP_MAC_RE = re.compile(r"^MAC Address:\s+(?P<mac>[0-9A-Fa-f:]{17})")
-NEIGH_INACTIVE_STATES = {"FAILED", "INCOMPLETE", "NONE"}
 
 
 def _now_iso() -> str:
@@ -57,11 +56,6 @@ class DeviceObservation:
     raw: Optional[str] = None
 
     def is_probably_present(self) -> bool:
-        if self.source == "ip neigh":
-            if self.state and self.state.upper() in NEIGH_INACTIVE_STATES:
-                return False
-            return bool(self.ip or self.mac)
-
         if self.source == "arp -a":
             return bool(self.mac)
 
@@ -172,7 +166,7 @@ class PresenceDetector:
     def _collect_all_sources(self) -> List[Tuple[str, List[DeviceObservation], List[str]]]:
         results: List[Tuple[str, List[DeviceObservation], List[str]]] = []
 
-        results.append(self._collect_ip_neigh())
+        results.append(self._collect_speedport_devices())
 
         if self.config.enable_arp_fallback:
             results.append(self._collect_arp_table())
@@ -180,31 +174,7 @@ class PresenceDetector:
         if self.config.enable_nmap_fallback:
             results.append(self._collect_nmap_scan())
 
-        if self.config.enable_speedport_fallback:
-            results.append(self._collect_speedport_devices())
-
         return results
-
-    def _collect_ip_neigh(self) -> Tuple[str, List[DeviceObservation], List[str]]:
-        method_name = "ip neigh"
-        result = self._run_command(["ip", "neigh"])
-        if result.error:
-            return method_name, [], [result.error]
-        if result.returncode != 0:
-            message = result.stderr.strip() or result.stdout.strip() or "ip neigh returned a non-zero exit code."
-            return method_name, [], [message]
-
-        devices = []
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            parsed = self._parse_ip_neigh_line(line)
-            if parsed:
-                devices.append(parsed)
-
-        self._maybe_fill_hostnames(devices)
-        return method_name, devices, []
 
     def _collect_arp_table(self) -> Tuple[str, List[DeviceObservation], List[str]]:
         method_name = "arp -a"
@@ -250,7 +220,7 @@ class PresenceDetector:
         speedport_command = self.config.speedport_command
         if not self._command_exists(speedport_command):
             return method_name, [], [
-                "speedport fallback is enabled, but the configured Speedport command was not found: {0}".format(
+                "Configured Speedport command was not found: {0}".format(
                     speedport_command
                 )
             ]
@@ -305,25 +275,6 @@ class PresenceDetector:
         if Path(command).is_file():
             return True
         return shutil.which(command) is not None
-
-    def _parse_ip_neigh_line(self, line: str) -> Optional[DeviceObservation]:
-        tokens = line.split()
-        if not tokens:
-            return None
-
-        observation = DeviceObservation(source="ip neigh", ip=tokens[0], raw=line)
-
-        for index, token in enumerate(tokens):
-            if token == "dev" and index + 1 < len(tokens):
-                observation.interface = tokens[index + 1]
-            elif token == "lladdr" and index + 1 < len(tokens):
-                observation.mac = _normalize_mac(tokens[index + 1])
-
-        last_token = tokens[-1].upper()
-        if last_token not in {"DEV", "LLADDR", "ROUTER"}:
-            observation.state = last_token
-
-        return observation
 
     def _parse_arp_line(self, line: str) -> Optional[DeviceObservation]:
         match = ARP_LINE_RE.match(line)
