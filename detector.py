@@ -19,7 +19,7 @@ NEIGH_INACTIVE_STATES = {"FAILED", "INCOMPLETE", "NONE"}
 
 
 def _now_iso() -> str:
-    return datetime.now().astimezone().isoformat(timespec="seconds")
+    return datetime.now().astimezone().isoformat(timespec="milliseconds")
 
 
 def _normalize_mac(mac: Optional[str]) -> Optional[str]:
@@ -497,7 +497,7 @@ class PresenceDetector:
                 "matched_by": match.matched_by,
                 "target_identifier": match.target_identifier,
                 "confidence": match.confidence,
-                "last_positive_detection": self.last_positive_detection.get(target.name),
+                "last_positive_detection": checked_at,
             }
 
         method_summary = ", ".join(sources_attempted) if sources_attempted else "no methods ran"

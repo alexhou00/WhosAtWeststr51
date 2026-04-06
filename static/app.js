@@ -6,9 +6,11 @@ const refreshButton = document.getElementById("refresh-button");
 const loadDebugButton = document.getElementById("load-debug-button");
 const refreshNote = document.getElementById("refresh-note");
 const globalLastChecked = document.getElementById("global-last-checked");
+let lastSuccessfulCheckedText = "-";
 
 const pollSeconds = Number(appConfig.pollingIntervalSeconds || 20);
-refreshNote.textContent = `Auto-refresh every ${pollSeconds} seconds.`;
+const idleRefreshNote = `Auto-refresh every ${pollSeconds} seconds.`;
+refreshNote.textContent = idleRefreshNote;
 
 function setBadgeState(element, kind, text) {
   element.textContent = text;
@@ -37,7 +39,14 @@ function formatTimestamp(value) {
     return value;
   }
 
-  return parsed.toLocaleString();
+  return parsed.toLocaleString([], {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function labelForMatchedBy(value) {
@@ -92,37 +101,40 @@ function renderPerson(person) {
 }
 
 function renderStatus(data) {
-  globalLastChecked.textContent = formatTimestamp(data.last_checked);
+  lastSuccessfulCheckedText = formatTimestamp(data.last_checked);
+  globalLastChecked.textContent = lastSuccessfulCheckedText;
   const people = Array.isArray(data.people) ? data.people : [];
   for (const person of people) {
     renderPerson(person);
   }
+}
 
-  debugOutput.textContent = JSON.stringify(
-    {
-      last_checked: data.last_checked,
-      sources_attempted: data.sources_attempted,
-      errors: data.errors,
-      people: data.people,
-      details: data.details,
-    },
-    null,
-    2
-  );
+function renderDebugData(data) {
+  debugOutput.textContent = JSON.stringify(data, null, 2);
 }
 
 function renderFetchError(message) {
-  globalLastChecked.textContent = "-";
+  globalLastChecked.textContent = lastSuccessfulCheckedText;
   for (const card of personCards) {
     const badge = card.querySelector(".person-badge");
     const statusText = card.querySelector(".person-status");
     setBadgeState(badge, "neutral", "Check failed");
     statusText.textContent = message;
   }
+
+  renderDebugData({
+    error: "status_refresh_failed",
+    message,
+    last_successful_checked: lastSuccessfulCheckedText,
+    occurred_at: new Date().toISOString(),
+  });
 }
 
 async function fetchJson(url) {
-  const response = await fetch(url, { cache: "no-store" });
+  const requestUrl = new URL(url, window.location.href);
+  requestUrl.searchParams.set("_ts", Date.now().toString());
+
+  const response = await fetch(requestUrl.toString(), { cache: "no-store" });
   let payload = {};
 
   try {
@@ -141,14 +153,38 @@ async function fetchJson(url) {
 
 async function refreshStatus() {
   refreshButton.disabled = true;
+  refreshButton.textContent = "Refreshing...";
+  refreshNote.textContent = "Refreshing from backend...";
 
   try {
-    const data = await fetchJson(appConfig.statusEndpoint || "/api/status");
-    renderStatus(data);
-  } catch (error) {
-    renderFetchError(error.message);
+    const results = await Promise.allSettled([
+      fetchJson(appConfig.statusEndpoint || "/api/status"),
+      fetchJson(appConfig.debugEndpoint || "/api/devices/debug"),
+    ]);
+
+    const statusResult = results[0];
+    const debugResult = results[1];
+
+    if (statusResult.status === "fulfilled") {
+      renderStatus(statusResult.value);
+    } else {
+      renderFetchError(statusResult.reason.message);
+    }
+
+    if (debugResult.status === "fulfilled") {
+      renderDebugData(debugResult.value);
+    } else {
+      renderDebugData({
+        error: "debug_refresh_failed",
+        message: debugResult.reason.message,
+        last_successful_checked: lastSuccessfulCheckedText,
+        occurred_at: new Date().toISOString(),
+      });
+    }
   } finally {
     refreshButton.disabled = false;
+    refreshButton.textContent = "Refresh now";
+    refreshNote.textContent = idleRefreshNote;
   }
 }
 
@@ -157,9 +193,14 @@ async function loadFullDebug() {
 
   try {
     const data = await fetchJson(appConfig.debugEndpoint || "/api/devices/debug");
-    debugOutput.textContent = JSON.stringify(data, null, 2);
+    renderDebugData(data);
   } catch (error) {
-    debugOutput.textContent = `Failed to load debug data: ${error.message}`;
+    renderDebugData({
+      error: "debug_refresh_failed",
+      message: error.message,
+      last_successful_checked: lastSuccessfulCheckedText,
+      occurred_at: new Date().toISOString(),
+    });
   } finally {
     loadDebugButton.disabled = false;
   }
