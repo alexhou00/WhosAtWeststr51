@@ -5,6 +5,7 @@ const debugOutput = document.getElementById("debug-output");
 const refreshButton = document.getElementById("refresh-button");
 const loadDebugButton = document.getElementById("load-debug-button");
 const refreshNote = document.getElementById("refresh-note");
+const globalLastChecked = document.getElementById("global-last-checked");
 
 const pollSeconds = Number(appConfig.pollingIntervalSeconds || 20);
 refreshNote.textContent = `Auto-refresh every ${pollSeconds} seconds.`;
@@ -81,18 +82,17 @@ function renderPerson(person) {
   card.classList.toggle("person-card-absent", !person.present);
 
   statusText.textContent = person.present
-    ? `${person.name} matched one of the configured device identifiers.`
-    : `${person.name} did not match any configured device during the latest check.`;
+    ? `${person.name}'s device was detected on the network.`
+    : `${person.name} is probably not at home right now.`;
 
-  setField(card, "last_checked", formatTimestamp(person.last_checked));
   setField(card, "method", person.method || "-");
   setField(card, "matched_by", labelForMatchedBy(person.matched_by));
   setField(card, "target_identifier", person.target_identifier || "-");
-  setField(card, "confidence", person.confidence || "-");
   setField(card, "last_positive_detection", formatTimestamp(person.last_positive_detection));
 }
 
 function renderStatus(data) {
+  globalLastChecked.textContent = formatTimestamp(data.last_checked);
   const people = Array.isArray(data.people) ? data.people : [];
   for (const person of people) {
     renderPerson(person);
@@ -112,6 +112,7 @@ function renderStatus(data) {
 }
 
 function renderFetchError(message) {
+  globalLastChecked.textContent = "-";
   for (const card of personCards) {
     const badge = card.querySelector(".person-badge");
     const statusText = card.querySelector(".person-status");

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Home Presence</title>
+    <title>Who's At Home?</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   </head>
   <body>
@@ -19,6 +19,10 @@
           <button id="refresh-button" type="button">Refresh now</button>
           <span id="refresh-note" class="subtle"></span>
         </div>
+        <p class="subtle global-last-checked">
+          Last checked:
+          <strong id="global-last-checked">-</strong>
+        </p>
 
         <div id="person-grid" class="person-grid">
           {% for target in target_summary %}
@@ -31,12 +35,8 @@
             <div class="person-hover-panel">
               <div class="hover-grid">
                 <div class="meta-item">
-                  <span class="label">Last checked</span>
-                  <strong data-field="last_checked">-</strong>
-                </div>
-                <div class="meta-item">
                   <span class="label">Method</span>
-                  <strong data-field="method">-</strong>
+                  <strong data-field="method" class="code-value">-</strong>
                 </div>
                 <div class="meta-item">
                   <span class="label">Matched by</span>
@@ -44,11 +44,7 @@
                 </div>
                 <div class="meta-item">
                   <span class="label">Target matched</span>
-                  <strong data-field="target_identifier">-</strong>
-                </div>
-                <div class="meta-item">
-                  <span class="label">Confidence</span>
-                  <strong data-field="confidence">-</strong>
+                  <strong data-field="target_identifier" class="code-value">-</strong>
                 </div>
                 <div class="meta-item">
                   <span class="label">Last positive</span>

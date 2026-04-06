@@ -93,7 +93,7 @@ h1 {
 
 .person-card {
   position: relative;
-  min-height: 220px;
+  min-height: 248px;
   padding: 20px;
   border-radius: 20px;
   background: linear-gradient(180deg, #f9fcfc 0%, #eef5f6 100%);
@@ -153,6 +153,7 @@ h1 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   width: 100%;
+  align-content: start;
 }
 
 .meta-item {
@@ -169,6 +170,11 @@ h1 {
   font-size: 0.9rem;
 }
 
+.code-value {
+  font-family: Consolas, "Courier New", monospace;
+  word-break: break-word;
+}
+
 .actions,
 .debug-actions {
   display: flex;
@@ -176,6 +182,10 @@ h1 {
   gap: 12px;
   margin-top: 20px;
   flex-wrap: wrap;
+}
+
+.global-last-checked {
+  margin: 10px 0 0;
 }
 
 button {
