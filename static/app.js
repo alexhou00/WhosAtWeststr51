@@ -8,7 +8,7 @@ const refreshNote = document.getElementById("refresh-note");
 const globalLastChecked = document.getElementById("global-last-checked");
 let lastSuccessfulCheckedText = "-";
 
-const pollSeconds = Number(appConfig.pollingIntervalSeconds || 20);
+const pollSeconds = Number(appConfig.pollingIntervalSeconds || 600);
 const idleRefreshNote = `Auto-refresh every ${pollSeconds} seconds.`;
 refreshNote.textContent = idleRefreshNote;
 
