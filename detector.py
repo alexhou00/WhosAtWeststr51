@@ -188,16 +188,18 @@ class PresenceDetector:
         }
 
     def _collect_all_sources(self) -> List[Tuple[str, List[DeviceObservation], List[str]]]:
-        results = [self._collect_ip_neigh()]
+        results: List[Tuple[str, List[DeviceObservation], List[str]]] = []
+
+        if self.config.enable_speedport_fallback:
+            results.append(self._collect_speedport_devices())
+
+        results.append(self._collect_ip_neigh())
 
         if self.config.enable_arp_fallback:
             results.append(self._collect_arp_table())
 
         if self.config.enable_nmap_fallback:
             results.append(self._collect_nmap_scan())
-
-        if self.config.enable_speedport_fallback:
-            results.append(self._collect_speedport_devices())
 
         return results
 
