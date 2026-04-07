@@ -17,7 +17,7 @@ let latestDeviceDebugPayload = null;
 let latestFrontendIssue = null;
 let activeRefreshPromise = null;
 
-const pollSeconds = Number(appConfig.pollingIntervalSeconds || 600);
+const pollSeconds = Number(appConfig.pollingIntervalSeconds || 60);
 const idleRefreshNote = `Auto-refresh every ${pollSeconds} seconds.`;
 if (refreshNote) {
   refreshNote.textContent = idleRefreshNote;
