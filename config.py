@@ -13,13 +13,13 @@ USER_CONFIG = {
             "hostnames": [],
         },
         {
-            "name": "Jennie",
+            "name": "Jenny",
             "macs": ["1A-3D-4C-EE-2C-B1"],
-            "ips": ["192.168.2.38"],
+            "ips": ["192.168.2.31"],
             "hostnames": [],
         },
         {
-            "name": "Alex",
+            "name": "Alyssa",
             "macs": ["EE-DC-3B-F9-D1-C6"],
             "ips": ["192.168.2.71"],
             "hostnames": [],
